@@ -1,0 +1,11 @@
+httpup: httpup (one way sync over http)
+httpup:
+httpup: The httup utility by Johannes Winkelmann provides one-way
+httpup: synchronization with remote file repositories over http.
+httpup:
+httpup: The slackmat-sync utility uses the httpup protocol to sync
+httpup: distributed slackmatic port repositories.
+httpup:
+httpup: http://jw.tks6.net/files/crux/httpup_manual.html
+httpup:
+httpup: Packaged by: maintainer@slackmatic.org

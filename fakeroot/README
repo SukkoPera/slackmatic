@@ -1,0 +1,9 @@
+# file fakeroot/README.slackmatic
+# wcm, 2007.05.22 - 2007.05.22
+# ===
+
+It is recommended to build fakeroot as real root:
+
+ $ sudo slackmat-build -R
+
+### EOF

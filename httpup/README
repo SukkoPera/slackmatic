@@ -1,0 +1,43 @@
+# file httpup/README.slackmatic
+# wcm, 2005.11.16 - 2005.12.21
+# ===
+This package includes httpup, a utility for one-way
+synchronization with remote file repositories over http.
+
+
+NOTES
+
+1.  Executables are installed in /usr/bin.
+
+2.  The httpup-make(8) utility is used to generate a repository definition
+file for a slackmatic repository.  It replaces the httpup-repgen utility
+from the source distribution.
+
+3.  The repository definition file for a slackmatic repository
+is named `HTTPUP'.
+
+
+GOTCHAS
+
+1.  httpup does not preserve file access permissions.  If you
+are developing a repository, make sure that any BUILD.rc
+scripts set executable bits in the package when necessary,
+rather than rely on file permissions within the port.
+
+2.  The correct syntax for the httpup command is:
+
+    httpup <COMMAND> [OPTIONS] <ARGS>
+
+That is, the <COMMAND> (one of sync|copy|list) should preceed
+the options.
+
+For example, this works:
+
+    httpup sync -r HTTPUP http://someurl/ /some/path
+
+While this form fails:
+
+    httpup -r HTTPUP sync http://someurl/ /some/path
+
+
+### EOF

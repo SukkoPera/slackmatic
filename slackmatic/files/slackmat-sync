@@ -1,0 +1,281 @@
+#!/bin/rc
+# slackmat-sync
+# slackmatic build system
+# httpup sync port repositories
+# wcm, 2005.12.07 - 2007.04.10
+# ===
+umask 022
+
+TRACE_FILE = /dev/stderr
+OPT_TRACE = 1
+CWD=`{pwd}
+
+_PROGPATH = $0
+_PROG = `{basename $0}
+_VERSION = 0.90
+_ARGS = $*
+
+_HTTPUP_FILE=HTTPUP
+_ALT_CONF = ()
+_ALT_SYNCDEFS = ()
+_ALT_REPOBASE = ()
+
+_SYNCURLS = ()
+
+nl='
+'
+
+## === begin function definitions ===
+
+fn mesg {
+    echo '['$_PROG']: '$*
+}
+
+
+fn trace {
+    if(!~ $OPT_TRACE 0 && !~ $TRACE_FILE'X' 'X'){
+        echo '['$_PROG' TRACE]: '$* >> $TRACE_FILE
+    }
+}
+
+
+fn error {
+    echo '['$_PROG' ERROR]: '$*
+}
+
+
+fn fatal {
+    ##exit_code = $1; shift
+    exit_code = 1
+    echo $_PROG' fatal: '$*
+    exit $exit_code
+}
+
+fn show_usage {
+    cat << %%%
+$_PROG:
+    syncronize local repository archive with distributed repositories
+
+usage: $_PROG [options] [repo ...]
+
+options:
+  -c <file>, --config-file <file>
+      specify configuration file
+
+  -h, --help
+      show help message
+
+  -L <dir>, --local-repobase <dir>
+      specify base directory for local repository archive
+
+  -S <dir>, --sync-defs <dir>
+      specify base directory for *.httpup sync definitions
+
+  -t, --trace
+      print "trace" output to stderr
+
+  -T, --notrace
+      suppress "trace" output
+
+  -U NAME@URL
+      sync remote repo at URL to local repo NAME
+%%%
+
+    return 0
+}
+
+
+fn do_config {
+    trace 'configuration ...'
+
+    if(!~ $_ALT_CONF'X' 'X'){
+        ## read alternate config file:
+        if(! test -r $_ALT_CONF){
+            fatal 'alternate configuration file '$_ALT_CONF' not found'
+        } else {
+            trace 'using alternate configuration file '$_ALT_CONF
+            . $_ALT_CONF
+        }
+    } else {
+        ## try to read global configuration:
+        if(test -r /etc/slackmatic/slackmat.conf){
+            trace 'reading /etc/slackmatic/slackmat.conf...'
+            . /etc/slackmatic/slackmat.conf
+        }
+        ## try to read local configuration:
+        if(test -r $home/.slackmatic/slackmat.conf){
+            trace 'reading '$home'/.slackmatic/slackmat.conf'
+            . $home/.slackmatic/slackmat.conf
+        }
+    }
+
+    if(~ $SLACKMAT_REPOBASE'X' 'X'){
+        SLACKMAT_REPOBASE = $CWD
+    }
+
+    ## command-line reconfiguration:
+    if(!~ $_ALT_REPOBASE'X' 'X'){
+        SLACKMAT_REPOBASE = $_ALT_REPOBASE
+    }
+    if(!~ $_ALT_SYNCDEFS'X' 'X'){
+        SLACKMAT_SYNCDEFS = $_ALT_SYNCDEFS
+    }
+
+    trace 'configuration done.'
+}
+
+
+fn sync_all {
+    trace 'syncing all defined repositories ...'
+
+    if(~ $SLACKMAT_SYNCDEFS'X' 'X'){
+        fatal 'sync definition directory is not defined'
+    }
+
+    if(! test -d $SLACKMAT_SYNCDEFS){
+        fatal 'sync definition directory not found: '$SLACKMAT_SYNCDEFS
+    }
+
+    for(r in $SLACKMAT_SYNCDEFS/*.httpup){
+        r = `{basename $r '.httpup'}
+        sync_one $r
+    }
+
+    trace 'syncing all defined repositories done.'
+}    
+
+
+fn sync_one {
+    ## $1 =  name of repo to sync as defined in $1.httpup
+    if(~ $1'X' 'X'){
+        fatal 'no repository requested'
+    }
+    n = $1
+    trace 'syncing repository "'$n'" ...'
+
+    if(~ $SLACKMAT_SYNCDEFS'X' 'X'){
+        fatal 'sync definition directory is not defined'
+    }
+
+    if(! test -d $SLACKMAT_SYNCDEFS){
+        fatal 'sync definition directory not found: '$SLACKMAT_SYNCDEFS
+    }
+
+    if(! test -r $SLACKMAT_SYNCDEFS/$n.httpup){
+        error 'sync definition '$SLACKMAT_SYNCDEFS/$n.httpup' not found'
+        fatal 'no sync definition found for repo "'$n'"'
+    }
+
+    URL=()
+    . $SLACKMAT_SYNCDEFS/$n.httpup
+    if(~ $URL'X' 'X'){
+        fatal 'no URL defined in '$SLACKMAT_SYNCDEFS/$n.httpup
+    }
+
+#    output=`` ($nl) {httpup sync -r $_HTTPUP_FILE $URL $SLACKMAT_REPOS/$name}
+#    if(~ $status 0){
+#        for(m in $output){
+#            echo '  [httpup]: '$m
+#        }
+#        msg 'syncing repository '$name' done.'
+#    } else {
+#        errmsg 'httpup problem syncing repository '$name'!'
+#    }
+
+    httpup sync -r $_HTTPUP_FILE $URL $SLACKMAT_REPOBASE/$n
+    e = $status
+    if(!~ $e 0){
+        fatal 'error reported by httpup sync'
+    }
+    
+    trace 'syncing repository "'$n'" done.'
+}
+
+
+fn sync_url {
+    ## $1 expected in format: NAME@URL
+    trace 'sync_url on '$1
+
+    n = `{echo $1 | cut -d'@' -f1}
+    u = `{echo $1 | cut -d'@' -f2}
+    if(~ $n'X' 'X' || ~ $u'X' 'X'){
+        fatal '-U argument not in NAME@URL format: '$1
+    }
+
+    trace 'syncing repo at '$u' to '$n' ...'
+
+    httpup sync -r $_HTTPUP_FILE $u $SLACKMAT_REPOBASE/$n
+    e = $status
+    if(!~ $e 0){
+        fatal 'error reported by httpup sync'
+    }
+    
+    trace 'sync_url on '$1' done.'
+}
+
+
+fn do_main {
+    while(~ $1 '-'*){
+        switch($1){
+            case ('-h' '--help')
+                show_usage
+                exit 0
+            case ('-c' '--config-file')
+                if(~ $2'X' 'X' || ~ $2 '-'*){
+                    fatal 'option '$1' requires an argument'
+                }
+                _ALT_CONF = $2; shift 2
+            case ('-L' '--local-repobase')
+                if(~ $2'X' 'X' || ~ $2 '-'*){
+                    fatal 'option '$1' requires an argument'
+                }
+                _ALT_REPOBASE = $2; shift 2
+            case ('-S' '--sync-defs')
+                if(~ $2'X' 'X' || ~ $2 '-'*){
+                    fatal 'option '$1' requires an argument'
+                }
+                _ALT_SYNCDEFS = $2; shift 2
+            case ('-t' '--trace')
+                OPT_TRACE = 1; shift
+            case ('-T' '--notrace' '--no-trace')
+                OPT_TRACE = 0; shift
+            case ('-U')
+                if(~ $2'X' 'X' || ~ $2 '-'*){
+                    fatal 'option '$1' requires an argument'
+                }
+                _SYNCURLS = ($_SYNCURLS $2); shift 2
+            case ('-'*)
+                error 'unknown option: '$1
+                show_usage
+                exit 1
+        }
+    }
+
+    do_config
+
+    ## process -U args:
+    if(!~ $#_SYNCURLS 0){
+        for(u in $_SYNCURLS){
+            sync_url $u
+        }
+    }
+
+    ## sync all repos defined in syncdefs:
+    if(~ $#* 0 && ~ $#_SYNCURLS 0){
+        sync_all
+    }
+
+    ## process repos named on command line:
+    if(!~ $#* 0){
+        while(!~ $1'X' 'X'){
+            sync_one $1
+            shift
+        }
+    }
+} 
+
+
+do_main $*
+exit 0
+
+### EOF

@@ -1,0 +1,23 @@
+# file slackmatic/README.slackmatic
+# wcm, 2005.11.16 - 2007.04.12
+# ===
+This is slackmatic, a package build system for Slackware.
+
+REQUIRES:
+
+  * rc_static
+      the plan 9 shell, installed in /bin/rc
+
+  * httpup
+      for using/synchronizing with remote repositories
+
+  * fakeroot
+      for building package as non-root user
+
+NOTES
+
+1.  Executables are installed in /usr/bin.
+
+2.  Configuration files installed in /etc/slackmatic.
+
+### EOF

@@ -1,0 +1,200 @@
+#!/bin/rc
+# slackmat-brief
+# onetime script to update port/BUILD.rc with BRIEF variable
+# wcm, 2007.04.12 - 2007.04.12
+# ===
+umask 022
+
+TRACE_FILE = /dev/stderr
+OPT_TRACE=1
+
+OPT_DRYRUN = 0
+OPT_BEFORE_PROJECT = 0
+
+_PROGPATH = $0
+_PROG = `{basename $0}
+_VERSION = 0.90
+_ARGS = $*
+_BUILD_FILE = 'BUILD.rc'
+
+CWD=`{pwd}
+nl='
+'
+
+## === begin function definitions ===
+
+fn mesg {
+    echo '['$_PROG']: '$*
+}
+
+
+fn trace {
+    if(!~ $OPT_TRACE 0 && !~ $TRACE_FILE'X' 'X'){
+        echo '['$_PROG' TRACE]: '$* >> $TRACE_FILE
+    }
+}
+
+
+fn error {
+    echo '['$_PROG' ERROR]: '$*
+}
+
+
+fn fatal {
+    ##exit_code = $1; shift
+    exit_code = 1
+    echo $_PROG' fatal: '$*
+    exit $exit_code
+}
+
+
+fn show_usage {
+    cat << %%%
+$_PROG: onetime script to insert BRIEF definitions into BUILD.rc files
+usage: $_PROG [options]
+options:
+  -d, --dry-run
+      do not modify BUILD.rc files
+       
+  -N, --after-name
+      insert BRIEF after NAME (default)
+
+  -P, --before-project
+      insert BRIEF before PROJECT (aesthetically preferred!)
+
+  -r, --repo-base <dir>
+      specify base directory for repository
+
+  -t, --trace
+      print "trace" output to stderr
+
+  -T, --notrace
+      suppress "trace" output
+
+notes:
+  * descends into each subdirectory of repository
+  * when no -r option is specified, runs in current directory
+  * depends on valid slack-desc file for port
+  * ignores BUILD.rc where BRIEF already exists
+%%%
+
+    return 0
+}
+
+
+fn do_brief {
+    _PORT = $1
+
+    if(grep 'BRIEF.*=.*' $_BUILD_FILE >/dev/null >[2]/dev/null){
+        mesg 'BRIEF appears to be defined for '$_PORT'; skipping ...'
+        return 0
+    }
+
+    if(! test -r slack-desc){
+        error 'no slack-desc found for '$_PORT'; skipping ...'
+        return 0
+    }
+
+    trace 'extracting brief description from slack-desc ...'
+
+    b = `` ($nl) {head -1 slack-desc |
+            sed -e '/^'$_PORT':/!d' \
+                -e 's/^.*: *'$_PORT' *//' \
+                -e 's/(\(.*\))/\1/' \
+                -e 's/''/''''/g' }
+
+    if(~ $b'X' 'X'){
+        error 'extracted brief is null/empty, skipping ...'
+        return 0
+    }
+    mesg 'extracted for '$_PORT': '$b
+
+    ## default: insert after NAME
+    cmd = `` () {cat << %%%
+/^NAME/a\
+BRIEF='$b'
+%%%
+}
+    ## same thing (less clear):
+    #cmd = `` () {printf '/^NAME/a\\\nBRIEF=''%s''' $b}
+
+    if(~ $OPT_BEFORE_PROJECT 1){
+        if(! grep '^PROJECT' $_BUILD_FILE >/dev/null >[2]/dev/null){
+            error 'PROJECT variable not defined in BUILD.rc'
+            error '(will insert after NAME instead)'
+        } else {
+        cmd = `` () {cat << %%%
+/^PROJECT/i\
+BRIEF='$b'
+%%%
+}
+        }
+    }
+
+    trace 'inserting BRIEF into '$_BUILD_FILE' ...'
+
+    if(~ $OPT_DRYRUN 1){
+        #echo 'sed -e '$cmd' '$_BUILD_FILE
+        sed -e $cmd $_BUILD_FILE
+    } else {
+        trace 'committing edit to BUILD.rc ...'
+        sed -e $cmd $_BUILD_FILE > $_BUILD_FILE.'{new}' &&
+            mv $_BUILD_FILE.'{new}' $_BUILD_FILE
+
+    }
+}
+
+
+fn do_main {
+    while(~ $1 '-'*){
+        switch($1){
+            case ('-h' '--help')
+                show_usage
+                exit 0
+            case ('-d' '--dry-run')
+                OPT_DRYRUN = 1; shift
+            case ('-N' '--after-name')
+                OPT_BEFORE_PROJECT = 0; shift
+            case ('-P' '--before-project')
+                OPT_BEFORE_PROJECT = 1; shift
+            case ('-r' '--repo-base')
+                if(~ $2'X' 'X' || ~ $2 '-'*){
+                    fatal 'option '$1' requires an argument'
+                }
+                _REPOBASE = $2; shift 2
+            case ('-t' '--trace')
+                OPT_TRACE = 1; shift
+            case ('-T' '--notrace' '--no-trace')
+                OPT_TRACE = 0; shift
+            case ('-'*)
+                error 'unknown option: '$1
+                show_usage
+                exit 1
+        }
+    }
+    if(~ $_REPOBASE'X' 'X'){
+        _REPOBASE = $CWD
+    }
+
+    @{
+        cd $_REPOBASE ||
+            fatal 'cannot cd to '$_REPOBASE
+
+        trace 'working in directory '$_REPOBASE
+
+        for(d in *){
+            if(test -d $d && test -r $d/$_BUILD_FILE){
+                trace 'processing '$d' ...'
+                cd $d ||
+                    fatal 'cannot cd to '$d
+                do_brief $d;
+                cd ../
+            }
+        }
+    }
+}
+
+do_main $*
+exit 0
+
+### EOF

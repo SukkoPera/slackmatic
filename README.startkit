@@ -1,0 +1,75 @@
+# README.startkit
+# getting started with slackmatic
+# wcm, 2007.04.17 - 2007.06.12
+# ===
+
+What is This?
+
+This is the slackmatic-startkit, a kit to perform a first-time
+installation of the slackmatic build system within a Slackware
+(and compatible) host environment.  Everything else you need is
+included in this kit.
+
+
+Installation?
+
+1) Unpack the slackmatic-startkit archive:
+
+  $ tar -xzvf slackmatic-startkit-0.91.tar.gz
+
+
+2) Change into the slackmatic-startkit directory created above:
+
+  $ cd slackmatic-startkit-0.91
+
+
+3) Obtain root permission (su|sudo|login) and run the install.sh script:
+
+  # ./install.sh
+
+
+4) All done!  The slackmatic build system is now installed on your
+system.
+
+
+
+What Just Happened?
+
+The install.sh script results in the installation of four
+packages on your Slackware system.  The sequence of events is:
+
+ * install the current rc shell package (included)
+ * build and install the slackmatic package from current port
+ * build and install the fakeroot package from current port
+ * build and install the httpup package from current port
+
+See the simple install.sh script for all the details.
+
+
+
+What Next?
+
+Read the documentation at the www.slackmatic.org website.
+Sync your system to the port repositories of interest, then
+start building and installing new software!
+
+
+
+Some Notes:
+
+ * the rc_static package includes the statically-linked binary
+installed in /bin/rc as required by all the slackmatic scripts
+
+ * although not strictly required, the fakeroot package is now
+integrated within slackmat-build and its use is highly recommended
+(run slackmat-build as a non-root user to avoid accidental file
+clobberage)
+
+ * httpup is the utility used by slackmat-sync to update a
+system with distributed port repositories
+
+ * this archive includes the sources for the fakeroot and
+httpup ports
+
+
+### EOF

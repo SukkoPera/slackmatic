@@ -1,0 +1,975 @@
+#!/bin/rc
+# slackmat-build
+# build a slackware package
+#
+# changes:
+#   2006.02.02:
+#     added NOSTRIP option
+#
+#   2006.05.02:
+#     deprecated -mcpu to -mtune in arch CFLAGS setup
+#     changed deprecated root:bin to root:root in chown binaries
+#     fixup gzip manpages to include subsections, eg manpage.3o
+#
+#   2006.05.22:
+#     added OPT_ROOTBIN=1 option to obtain deprecated root:bin chown for binaries
+#     added OPT_NOSTRIP=1 option; usage of NOSTRIP option is deprecated
+#
+#   2006.05.22
+#     fixed bug causing unintended compression of some files
+#
+#   2006.05.29
+#     fixed OPT_NOSTRIP option bug
+#
+#   2007.04.12 (release 0.90)
+#     added x86_64 to supported ARCHs
+#     removed deprecated my_slack-desc{} support
+#     integrated fakeroot support
+#     run build function in a subprocess
+#     added OPT_TRACE and TRACE_FILE for control of "trace" output
+#     added $home/.slackmatic/slackmat.conf configuration support
+#     added support for global slack-desc.in template
+#     added --config-file alternative configuration file support
+#     added --build-file alternative build file support
+#     added "keep" support
+#     added "waybill" generator/checking support
+#     added --download-only option
+#     added --checksum-update option
+#     added --source-archive option
+#     append short build summary to BUILD.rc in $DOC
+#     added quick fail tests
+#     nag on missing BRIEF variable
+#
+#   2007.06.12 (release 0.91)
+#     absolute path to makepkg
+#     added MYFETCH custom fetch support
+#     waybill format: octal mode field 4 chars wide, zero padded
+# 
+# wcm, 2005.10.07 - 2007.06.12
+# ===
+umask 022
+
+TRACE_FILE = /dev/stderr
+OPT_TRACE = 1
+OPT_NOSTRIP = 0
+OPT_CHECKSUM_UP = 0
+OPT_DOWNLOAD_ONLY = 0
+OPT_WAYBILL_UP = 0
+OPT_WANTROOT = 0
+CWD=`{pwd}
+
+_PROGPATH = $0
+_PROG = `{basename $0}
+_VERSION = 0.91
+_ARGS = $*
+_ARCHLIST=(noarch i386 i486 i586 i686 s390 x86_64)
+_BUILD_FILE='BUILD.rc'
+_MD5_FILE='checksum.md5'
+_KEEP_SPEC='keep.spec'
+_ALT_BUILD = ()
+_ALT_CONF = ()
+_ALT_DISTFILES = ()
+_WARN_BRIEF = 0
+_MAKEPKG=/sbin/makepkg
+
+if(~ $_IN_FAKEROOT'X' 'X'){
+    _IN_FAKEROOT = 0
+}
+
+_UID = `{id -u}
+nl='
+'
+
+
+## === begin function definitions ===
+
+fn mesg {
+    echo '['$_PROG']: '$*
+}
+
+
+fn trace {
+    if(!~ $OPT_TRACE 0 && !~ $TRACE_FILE'X' 'X'){
+        echo '['$_PROG' TRACE]: '$* >> $TRACE_FILE
+    }
+}
+
+
+fn error {
+    echo '['$_PROG' ERROR]: '$*
+}
+
+
+fn fatal {
+    ##exit_code = $1; shift
+    exit_code = 1
+    echo $_PROG' fatal: '$*
+    exit $exit_code
+}
+
+
+fn show_usage {
+    cat << %%%
+$_PROG: build a slackware package
+usage: $_PROG [options]
+options:
+  -B <file>, --build-file <file>
+      specify alternate build file
+
+  -c <file>, --config-file <file>
+      specify configuration file
+
+  -C, --checksum-update
+      install/update checksum file
+
+  -D, --download-only
+      download sources only
+
+  -h, --help
+      show help message
+
+  -R, --root-build
+      permit build as root user
+
+  -s <dir>, --source-archive <dir>
+      specify directory for source archive
+
+  -S, --nostrip
+      do not strip binaries in package
+
+  -t, --trace
+      print "trace" output to stderr
+
+  -T, --notrace
+      suppress "trace" output
+
+  -W, --waybill-update
+      install/update waybill file
+%%%
+
+    return 0
+}
+
+
+fn local_file {
+    ## parse $1
+    ## strip 'MYFETCH:' or url prefix and leading dirs
+    ## return filename
+    if(!~ $1'X' 'X'){
+        switch($1){
+            case MYFETCH:*
+                f = `{echo $1 | sed 's}^MYFETCH:}}'}
+            case *
+                f = `{echo $1 | sed 's}^.*://.*/}}g'}
+        }
+        echo $f 
+    }
+}
+
+
+fn fetch_file {
+    trace 'downloading file '$1' ...'
+
+    wget -v \
+      --tries'='3 \
+      --waitretry'='3 \
+      --no-directories \
+      --passive-ftp \
+      $1 || return 1
+
+    trace 'downloading file '$1' done.'
+}
+
+
+fn do_config {
+    trace 'configuration ...'
+
+    if(!~ $_ALT_CONF'X' 'X'){
+        ## read alternate config file:
+        if(! test -r $_ALT_CONF){
+            fatal 'alternate configuration file '$_ALT_CONF' not found'
+        } else {
+            trace 'using alternate configuration file '$_ALT_CONF
+            . $_ALT_CONF
+        }
+    } else {
+        ## try to read global configuration:
+        if(test -r /etc/slackmatic/slackmat.conf){
+            trace 'reading /etc/slackmatic/slackmat.conf...'
+            . /etc/slackmatic/slackmat.conf
+        }
+        ## try to read local configuration:
+        if(test -r $home/.slackmatic/slackmat.conf){
+            trace 'reading '$home'/.slackmatic/slackmat.conf'
+            . $home/.slackmatic/slackmat.conf
+        }
+    }
+
+    if(!~ $_ALT_BUILD'X' 'X'){
+        _BUILD_FILE = $_ALT_BUILD
+    } else {
+        _BUILD_FILE = $CWD/$_BUILD_FILE
+    }
+    
+    if(test -r $_BUILD_FILE){
+        trace 'reading '$_BUILD_FILE' ...'
+        . $_BUILD_FILE
+    } else {
+        fatal 'build file not found: '$_BUILD_FILE
+    }
+
+    if(~ $ARCH'X' 'X'){
+        ARCH=$DEFAULT_ARCH
+    }
+
+    if(~ $BUILD'X' 'X'){
+        BUILD=$DEFAULT_BUILD
+    }
+
+    ## do we have BRIEF description?
+    if(~ $BRIEF'X' 'X'){
+        trace 'BRIEF variable not set'
+        _WARN_BRIEF = 1
+    }
+
+    ## command-line reconfiguration:
+    if(!~ $_ALT_DISTFILES'X' 'X'){
+        SLACKMAT_DISTFILES = $_ALT_DISTFILES
+    }
+
+    trace 'configuration done.'
+}
+
+
+fn do_sanity {
+    trace 'sanity checks ...'
+    if(~ $NAME'X' 'X'){
+        fatal 'variable $NAME not set or empty'
+    }
+    if(~ $RELEASE'X' 'X'){
+        fatal 'variable $RELEASE not set or empty'
+    }
+    if(~ $ARCH'X' 'X'){
+        fatal 'variable $ARCH not set or empty'
+    }
+    if(!~ $ARCH $_ARCHLIST){
+        fatal 'variable $ARCH='$ARCH' not valid'
+    }
+
+    whatis -f build >/dev/null >[2=1] || {
+        fatal 'function build not defined'
+    } 
+    trace 'sanity checks done.'
+}
+
+
+fn quick_fail {
+    ## fail early if possible:
+    trace 'running quick fail tests ...'
+
+    _WAYBILL = waybill.$ARCH
+    trace 'quick fail test for '$_WAYBILL' file ...'
+    if(! test -r $_WAYBILL && !~ $OPT_WAYBILL_UP 1){
+        error 'no existing '$_WAYBILL' file (run with -W option to update)'
+        fatal 'quick fail: no waybill file'
+    }
+
+    trace 'running quick fail tests done.' 
+}
+
+
+fn do_prepwork {
+    trace 'preparing work directories ...'
+    if(~ $WORK'X' 'X'){
+        WORK=$CWD/work
+    }
+    if(test ! -d $WORK){
+        mkdir -p $WORK
+    }
+
+    SRC=$WORK/src
+    rm -rf $SRC
+    mkdir -p $SRC
+
+    PKG=$WORK/pkg
+    rm -rf $PKG
+    mkdir -p $PKG
+    mkdir -p $PKG/install
+
+    DOC=$PKG/usr/doc/$NAME-$RELEASE
+    mkdir -p $DOC
+    trace 'preparing work directories done.'
+}
+
+
+fn do_fetch {
+    trace 'fetching sources ...'
+    for(s in $SOURCE){
+        f = `{local_file $s}
+        trace 'local_file for '$s' is '$f
+        if(test -r $CWD/$f ){
+            f = $CWD/$f
+            trace 'source file '$s' found in '$f
+        } else if(test -r $SLACKMAT_DISTFILES/$f ){
+            f = $SLACKMAT_DISTFILES/$f
+            trace 'source file '$s' found in '$f
+        } else if(~ $s MYFETCH:*) {
+            ## custom fetch:
+            if(! whatis -f myfetch >/dev/null >[2=1]){
+                fatal 'no myfetch function defined for source '$s
+            }
+            trace 'custom myfetch for '$s
+            myfetch $f || {
+                fatal 'error returned from myfetch for '$s
+            }
+        } else {
+            if(!~ $s $f){
+                fetch_file $s || \
+                fatal 'failure fetching file '$f
+            } else {
+                fatal 'source file '$f' not found and no url specified'
+            }
+        }
+    }
+    trace 'fetching sources done.'
+}
+
+
+fn make_checksum {
+    trace 'making checksum file for sources ...'
+
+    for(s in $SOURCE){
+        f = `{local_file $s}
+        trace 'make_checksum local_file for '$s' is '$f
+
+        if(test -r $CWD/$f ){
+            f = $CWD/$f
+        } else if(test -r $SLACKMAT_DISTFILES/$f ){
+            f = $SLACKMAT_DISTFILES/$f
+        } else {
+            ## shouldn't happen after do_fetch: 
+            fatal 'source file '$f' not found!'
+        }
+
+        if(test -r $f){
+             md5sum $f | sed 's}/.*/}}' >> $MD5
+        } else {
+             fatal 'can''t read source file '$f' to make checksum'
+        }
+
+    }
+
+    if(~ $SOURCE'X' 'X'){
+        ## no sources; touch checksum file:
+        trace 'no source files defined, touching '$MD5
+        touch $MD5
+    }
+
+    trace 'making checksum file for sources done.'
+}
+
+
+fn do_checksum {
+    MD5=$CWD/$_MD5_FILE
+    trace 'using checksum file '$MD5
+
+    if(! test -r $MD5){
+        trace 'no checksum file found'
+        if(!~ $OPT_CHECKSUM_UP 1){
+            error 'no existing checksum file (run with -C option to update)'
+            fatal 'no checksum file found.'
+        } else {
+            make_checksum
+        }
+    } else if(~ $OPT_CHECKSUM_UP 1){
+        trace 'updating existing checksum file ...'
+        rm -f $MD5.orig
+        mv $MD5 $MD5.orig
+        make_checksum
+        if(! cmp -s $MD5.orig $MD5){
+            mesg 'warning: checksum file has changed:'
+            diff -U0 $MD5.orig $MD5
+        }
+    }
+
+    for(s in $SOURCE){
+        f = `{local_file $s}
+        trace 'checksum local_file for '$s' is '$f
+
+        if(test -r $CWD/$f ){
+            f = $CWD/$f
+        } else if(test -r $SLACKMAT_DISTFILES/$f ){
+            f = $SLACKMAT_DISTFILES/$f
+        } else {
+            ## shouldn't happen: 
+            fatal 'source file '$f' not found!'
+        }
+
+        k = `{md5sum $f | sed 's}  .*$}}' }
+        if(~ $k'X' 'X') {
+            fatal 'error finding checksum for '$f
+        } else {
+            trace 'checksum computed for '$f' is '$k
+        }
+
+        f = `{basename $f}
+        if(~ $f'X' 'X'){
+             fatal 'error in base filename for source file '$s
+        } else {
+             trace 'base filename for '$s' is '$f
+        }
+  
+        j = `{fgrep $f $MD5 | cut -d' ' -f1} 
+        if(~ $j'X' 'X'){
+            fatal 'checksum for file '$f' not found in '$MD5
+        } else {
+            trace 'checksum listed for file '$f' is '$j
+        }
+
+        if(~ $j $k){
+            trace 'checksum for '$f': ok'
+        } else {
+            fatal 'checksum failed for source file '$f
+        }
+ 
+    }
+
+    trace 'testing source checksums done.'
+}
+
+
+fn do_unpack {
+    trace 'unpacking sources ...'
+    for(s in $SOURCE){
+        f = `{local_file $s}
+        trace 'local_file for '$s' is '$f
+
+        if(test -r $CWD/$f ){
+            f = $CWD/$f
+        } else if(test -r $SLACKMAT_DISTFILES/$f ){
+            f = $SLACKMAT_DISTFILES/$f
+        } else {
+            ## shouldn't happen: 
+            fatal 'source file '$f' not found!'
+        }
+
+        trace 'unpacking source file '$f' ...'
+        #_TARV='-v'
+        #_TARV=''
+        switch($f){
+            ## XXX TODO: add cases for zip, cab
+            case *.tar.gz *.tar.Z *.tgz
+                tar $_TARV -C $SRC -xzf $f
+            case *.tar.bz2
+                tar $_TARV -C $SRC -xjf $f
+            case *
+                cp $f $SRC
+        }
+
+    }
+
+    chown -R root:root $SRC
+    ## fixup funky source perms:
+    trace 'fixing funky source permissions ...'
+    find $SRC -perm 664 -exec chmod 644 '{}' ';'
+    #find $SRC -perm 600 -exec chmod 644 '{}' ';'
+    #find $SRC -perm 444 -exec chmod 644 '{}' ';'
+    #find $SRC -perm 400 -exec chmod 644 '{}' ';'
+    #find $SRC -perm 440 -exec chmod 644 '{}' ';'
+    find $SRC -perm 777 -exec chmod 755 '{}' ';'
+    find $SRC -perm 775 -exec chmod 755 '{}' ';'
+    find $SRC -perm 511 -exec chmod 755 '{}' ';'
+    find $SRC -perm 711 -exec chmod 755 '{}' ';'
+    find $SRC -perm 555 -exec chmod 755 '{}' ';'
+
+    trace 'unpacking sources done.'
+}
+
+
+fn do_slack-desc {
+    trace 'installing slack-desc file ...'
+
+    if(test -r $CWD/slack-desc){
+        trace 'found existing slack-desc file'
+        n=`{cat $CWD/slack-desc | sed -e '/^$/d' -e '/^[ #]/d' | wc -l}
+        if(test $n -ne 11){
+            trace 'slack-desc file contains '$n' description lines'
+            fatal 'slack-desc not exactly 11 description lines'
+        } else {
+            install -m 0644 $CWD/slack-desc $PKG/install && \
+            trace 'existing slack-desc file installed.'
+        }
+    } else {
+        _TEMPLATE = ()
+        if(test -r $CWD/slack-desc.in){
+            _TEMPLATE = $CWD/slack-desc.in
+        } else if(test -r $home/.slackmatic/slack-desc.in){
+            _TEMPLATE = $home/.slackmatic/slack-desc.in
+        } else if(test -r /etc/slackmatic/slack-desc.in){
+            _TEMPLATE = /etc/slackmatic/slack-desc.in
+        } else {
+            fatal 'unable to find slack-desc.in template'
+        }
+        trace 'generating slack-desc from template: '$_TEMPLATE
+
+        rm -Rf $WORK/slack-desc.out
+        _fn = $WORK/fn_slack-desc.rc
+        rm -Rf $_fn
+        touch $_fn || fatal 'unable to create file '$_fn
+
+        ## strategy:
+        ##   build a 'here' document within a function definition
+        ##   source it in; interpret with rc
+        ##   variable substitution occurs without collapsing whitespace
+        ##   filter output from function into slack-desc
+        ##   XXX build up a function string internally and then eval it
+
+        echo 'fn fn_slack-desc {' >> $_fn
+        echo '  cat - << EOF' >> $_fn
+        cat $_TEMPLATE | sed -e '/^[^:]/d' >> $_fn
+        echo 'EOF' >> $_fn
+        echo '}' >> $_fn
+        . $_fn || fatal 'unable to source '$_fn
+        rm $_fn; _fn=()
+        fn_slack-desc | sed -e 's/^:/'$NAME':/' >> $WORK/slack-desc.out 
+        n=`{cat $WORK/slack-desc.out | wc -l}
+        if(test $n -ne 11){
+            trace 'slack-desc.in file contains '$n' description lines'
+            fatal 'slack-desc.in not exactly 11 description lines'
+        } else {
+            install -m 0644 $WORK/slack-desc.out $PKG/install/slack-desc && \
+                mv $WORK/slack-desc.out $CWD/slack-desc
+            trace 'slack-desc generated from slack-desc.in'
+        }
+    }
+
+    trace 'installing slack-desc file done.'
+}
+
+
+fn do_arch {
+    trace 'configuring for build arch ...'
+
+    if(~ $DIETOK 1 || ~ $DIETOK [Yy][Ee][Ss]){
+        DIETOK=1
+    }
+
+    if(~ $DIETOK 1 && test -x /usr/bin/diet && ~ $#NODIET 0){
+        ## compile with diet:
+        CC='diet -Os gcc'
+        ## wcm, 2006.11.07, mod for slamd64:
+        if(~ $ARCH x86_64){
+            ARCH=x86_64diet
+        } else {
+            ARCH=`{echo $ARCH |sed -e 's/i[4-6]86/i386/'}
+            ARCH=$ARCH'diet'
+        }
+    }else{
+        CC=$DEFAULT_CC
+    }
+    trace '$CC set to: '$CC    
+
+    ## setup compiler flags:
+    if(~ $CFLAGS ()){
+        switch($ARCH){
+            case 'i386'
+                CFLAGS=$DEFAULT_CFLAGS' -march=i386 -mcpu=i686'
+            case 'i486'
+                CFLAGS=$DEFAULT_CFLAGS' -march=i486 -mtune=i686'
+            case 'i586'
+                CFLAGS=$DEFAULT_CFLAGS' -march=i586 -mtune=i686'
+            case 'i686'
+                CFLAGS=$DEFAULT_CFLAGS' -march=i686 -mtune=i686'
+            case 's390'
+                CFLAGS=$DEFAULT_CFLAGS
+            case 'x86_64'
+                CFLAGS=$DEFAULT_CFLAGS
+            case *diet
+                CFLAGS=$DEFAULT_CFLAGS
+            case 'noarch'
+                ; 
+            case *
+                fatal 'unknown or undefined $ARCH: '$ARCH
+        }
+    }
+    trace '$CFLAGS set to: '$CFLAGS
+
+    trace 'configuring for build arch done.'
+}
+
+
+fn do_build {
+    trace 'starting build function ...'
+
+    whatis -f build > /dev/null || {
+        fatal 'build function not found'
+    }
+
+    @{build} || \
+        fatal 'build function returned error'
+
+    trace 'build function done.'
+}
+
+
+fn do_strip {
+    trace 'stripping binaries ...'
+
+    ## strip binaries:
+    find . | xargs -r file | \
+        grep 'executable' | grep 'ELF' | \
+        cut -f1 -d: | \
+        xargs -r strip --strip-unneeded >[2] /dev/null
+
+    ## strip shared objects libs:
+    find . | xargs -r file | \
+        grep 'shared object' | grep 'ELF' | \
+        cut -f1 -d: | \
+        xargs -r strip --strip-unneeded >[2] /dev/null
+
+    ## strip static libs:
+    find . | xargs -r file | \
+        grep 'current ar archive' | \
+        cut -f1 -d: | \
+        xargs -r strip --strip-unneeded >[2] /dev/null
+}
+
+
+fn do_fixup {
+    trace 'fixing package ...'
+
+    ## copy in install/*:
+    if(test -d $CWD/install){
+        cp $CWD/install/* $PKG/install
+    }
+
+    cd $PKG
+    ## remove some perl junk files:
+    ## XXX, wait, undesireable as a global implementation
+    #find . \
+    #    -name .packlist \
+    #    -o -name autosplit.ix \
+    #    -o -name perllocal.pod \
+    #        | xargs -r rm
+        
+    ## enforce slackware package policies
+
+    ## strip binaries:
+    if(~ $OPT_NOSTRIP 1){
+        trace 'OPT_NOSTRIP set, not stripping binaries ...'
+    } else {
+        do_strip
+    }
+
+    ## XXX deprecated policy: chown binaries in these dirs to root:bin
+    ## as of Slackware changelog 2006.03.21, chown binaries root:root
+    ## for backward compatibility, obtain deprecated behavior with OPT_ROOTBIN=1
+    BINDIRS=(
+        bin usr/bin usr/X11R6/bin usr/local/bin
+        sbin usr/sbin usr/local/sbin
+    )
+    for(d in $BINDIRS){
+        if(test -d $d){
+            if(!~ $OPT_ROOTBIN 1) {
+                chown -R root:root $d
+            } else {
+                chown -R root:bin $d
+            }
+            chmod -R 0755 $d
+        }
+    }
+
+    ## gzip man pages:
+    find . (-path './*/man*/*'  -name '*.[1-9]') \
+        -o (-path './*/man*/*'  -name '*.[1-9]?') | \
+        xargs -r gzip -9
+
+    ## gzip info pages:
+    find . (-path './usr/info/*' -name '*.info') \
+        -o (-path './usr/info/*' -name '*.info-[0-9]') \
+        -o (-path './usr/info/*' -name '*.info-[0-9][0-9]') | \
+        xargs -r gzip -9
+
+    ## make/save package.txt file:
+    ## XXX, not implemented
+    #cat $PKG/install/slack-desc >$CWD/$NAME-$RELEASE-$ARCH-$BUILD.txt
+
+    ## save BUILD.rc, slackmatic README:
+    _BUILD_DOC = $DOC/BUILD.rc
+    install -m 0644 $_BUILD_FILE $_BUILD_DOC
+
+    _ISO_DATE = `{date -u +%FT%T}
+    _HOST = `{hostname -f}
+    _UNAME = `{uname -srmp}
+
+    cat << %%% >> $_BUILD_DOC
+## -----
+## slackmatic build summary:
+## build prog: $_PROG $_VERSION
+## build args: $_ARGS
+## build date: $_ISO_DATE
+## build host: $_HOST
+## host uname: $_UNAME
+## -----
+%%%
+    
+    if(test -r $CWD/README){
+        install -m 0644 $CWD/README $DOC/README.slackmatic
+    }
+
+    ## fixup some permissions in $DOC:
+    {
+        chown -R root:root $DOC
+        find $DOC -type d | xargs -r chmod 0755
+        find $DOC -type f | xargs -r chmod go-xw
+    }
+
+    ## remove empty directories:
+    #find $PKG -depth -type d -print0 \
+    #    | xargs -r -0 rmdir >/dev/null >[2]/dev/null || true
+
+    trace 'fixing package done.'
+}
+
+
+fn do_waybill {
+    trace 'checking waybill ...'
+
+    _WAYBILL = $CWD/waybill.$ARCH
+    _WAYBILL_NEW = $WORK/waybill.$ARCH
+
+    @{cd $PKG; find . \
+        -type l -printf '%M|%04m|%u/%g|%p|->|%l|\n' \
+        -o ! -type l -printf '%M|%04m|%u/%g|%p|\n' } \
+        | sed -e 's/|\.\//|/' -e '/|\./d' -e '/|install/d' \
+        | sort -d -t'|' -k4,4 \
+        > $_WAYBILL_NEW
+
+    if(! test -s $_WAYBILL_NEW){
+        fatal 'waybill is empty; no files in package???'
+    }
+
+    if(! test -s $_WAYBILL){
+        if(~ $OPT_WAYBILL_UP 1){
+            mesg 'installing new waybill'
+            cp $_WAYBILL_NEW $_WAYBILL
+            return 0
+        } else {
+            error 'no existing waybill found (run with -W option to update)'
+            fatal 'cannot check waybill'
+        }
+    }
+
+    _WAYBILL_DIFF = $WORK/waybill.diff
+    diff -U0 $_WAYBILL $_WAYBILL_NEW > $_WAYBILL_DIFF
+    if(test -s $_WAYBILL_DIFF){
+        trace 'waybill mismatch'
+        if(~ $OPT_WAYBILL_UP 1){
+            mesg 'warning: waybill mismatch found (diff output):'
+            cat $_WAYBILL_DIFF
+            mesg 'updating waybill'
+            mv $_WAYBILL $_WAYBILL.orig
+            cp $_WAYBILL_NEW $_WAYBILL
+        } else {
+            error 'waybill mismatch found (diff output):'
+            cat $_WAYBILL_DIFF
+            error 'waybill mismatch (run with -W option to update)'
+            fatal 'waybill mismatch'
+        }
+    }
+
+    trace 'checking waybill done.'
+}
+
+
+fn do_keep {
+
+    if(! test -e $CWD/$_KEEP_SPEC ){
+        trace 'no "keep" files requested'
+        return 0
+    }
+
+    ## else: 
+    trace 'setting "keep" files ...'
+
+    if(~ $_WAYBILL'X' 'X' || ! test -e $_WAYBILL){
+        fatal 'cannot find waybill'
+    }
+
+    ## generate list of files in package:
+    _LIST = $WORK/list
+    cat $_WAYBILL \
+        | grep '^-' \
+        | cut -d'|' -f4 \
+        > $_LIST
+        
+    if(! test -s $_LIST){
+        fatal 'no files in package???'
+    }
+
+    _KEEP = $WORK/keep
+    grep -f $CWD/$_KEEP_SPEC $_LIST > $_KEEP
+    if(! test -s $_KEEP){
+        trace 'no matches in package for "keep" files'
+        return 0
+    }
+
+    ## else:
+    _KEEPINST = $WORK/keepinst
+    ## note suppression of variable substitution '%%%':
+    cat << '%%%' > $_KEEPINST
+## slackmatic "keep" support:
+do_keep() {
+    NEW="$1"
+    OLD="`dirname $NEW`/`basename $NEW .new`"
+    if [ ! -r $OLD ]; then
+        ## if no existing version of keep file, mv .new into position:
+        mv $NEW $OLD
+    elif [ "`cat $OLD | md5sum`" = "`cat $NEW | md5sum`" ]; then
+        ## if .new keep file is same as old; rm .new as redundant:
+        rm $NEW
+    fi
+    ## otherwise, leave original and .new
+}
+%%%
+
+    keeps = `` ($nl) {cat $_KEEP}
+    for(k in $keeps){
+        mv $PKG/$k $PKG/$k'.new'
+        echo 'do_keep '$k'.new' >> $_KEEPINST
+    }
+
+    _DOINST = $PKG/install/doinst.sh
+    if(! test -e $_DOINST){
+        ## create new doinst.sh:
+        echo '#!/bin/sh' > $_DOINST
+    }
+    ## append keeps to doinst.sh
+    cat $_KEEPINST >> $_DOINST
+    
+    trace 'setting "keep" files done.'
+}
+
+
+fn do_makepkg {
+    trace 'running makepkg ...'
+    @{
+        cd $PKG
+        $_MAKEPKG -l y -c n $CWD/$NAME-$RELEASE-$ARCH-$BUILD.tgz
+    }
+    echo $NAME-$RELEASE-$ARCH-$BUILD.tgz > $CWD/package
+    trace 'running makepkg done.'
+}
+
+
+fn do_nag {
+    if(!~ $_WARN_BRIEF 0){
+        mesg 'reminder: please define BRIEF variable in '$_BUILD_FILE
+    }
+}
+
+
+fn do_main {
+    while(~ $1 '-'*){
+        switch($1){
+            case ('-h' '--help')
+                show_usage
+                exit 0
+            case ('-B' '--build-file')
+                if(~ $2'X' 'X' || ~ $2 '-'*){
+                    fatal 'option '$1' requires an argument'
+                }
+                _ALT_BUILD = $2; shift 2
+            case ('-c' '--config-file')
+                if(~ $2'X' 'X' || ~ $2 '-'*){
+                    fatal 'option '$1' requires an argument'
+                }
+                _ALT_CONF = $2; shift 2
+            case ('-C' '--checksum-update')
+                OPT_CHECKSUM_UP = 1; shift 
+            case ('-D' '--download-only')
+                OPT_DOWNLOAD_ONLY = 1; shift
+            case ('-R' '--root-build')
+                OPT_WANTROOT = 1; shift
+            case ('-s' '--source-archive')
+                if(~ $2'X' 'X' || ~ $2 '-'*){
+                    fatal 'option '$1' requires an argument'
+                }
+                _ALT_DISTFILES = $2; shift 2
+            case ('-S' '--nostrip')
+                OPT_NOSTRIP = 1; shift
+            case ('-t' '--trace')
+                OPT_TRACE = 1; shift
+            case ('-T' '--notrace' '--no-trace')
+                OPT_TRACE = 0; shift
+            case ('-W' '--waybill-update')
+                OPT_WAYBILL_UP = 1; shift
+            case ('-'*)
+                error 'unknown option: '$1
+                show_usage
+                exit 1
+        }
+    }
+    if(~ $_UID 0){
+        if(~ $_IN_FAKEROOT 1){
+            trace 'running in fakeroot environment'
+        } else if(!~ $OPT_WANTROOT 1){
+            error 'running as root is not permitted; use -R option to override'
+            fatal 'running as root is not permitted'
+        }
+    } else {
+        ## $_UID != 0
+        if(~ $OPT_WANTROOT 1){
+            fatal 'requesting root build requires root privilege'
+        }
+        if(! whatis fakeroot >/dev/null >[2]/dev/null) {
+            error 'fakeroot utility is required to run as non-root user'
+            fatal 'fakeroot utility not found'
+        }
+        
+        trace 'entering fakeroot environment ...'
+        _IN_FAKEROOT=1 fakeroot $_PROGPATH $_ARGS
+        e = $status
+        trace 'leaving fakeroot environment.'
+        exit $e
+    }
+    trace 'home is: '$home
+
+    do_config
+    do_sanity
+    if(!~ $OPT_DOWNLOAD_ONLY 1){
+        do_prepwork
+    }
+    ## note some ports may be self-contained, w/ no SOURCE:
+    if(!~ $SOURCE'X' 'X'){
+        do_fetch
+        do_checksum
+        if(!~ $OPT_DOWNLOAD_ONLY 1){
+            do_unpack
+        }
+    } else {
+        ## do_checksum will touch an empty checksum file:
+        do_checksum
+        trace 'no sources to download'
+    }
+    if(~ $OPT_DOWNLOAD_ONLY 1){
+        trace 'download only completed.'
+        return 0
+    }
+    do_arch
+    ## fail missing waybill.$ARCH before build:
+    quick_fail
+    ## fail bad slack-desc before build:
+    do_slack-desc
+    do_build
+    do_fixup
+    do_waybill
+    do_keep
+    do_makepkg
+    do_nag
+}
+
+do_main $*
+exit 0
+
+### EOF

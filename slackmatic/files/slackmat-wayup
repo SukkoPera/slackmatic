@@ -1,0 +1,47 @@
+#!/bin/rc
+# slackmat-wayup.rc
+# onetime script to update waybill files for
+# slackmatic 0.90 --> 0.91
+# wcm, 2007.06.12 - 2007.06.12
+# ===
+
+## assume run from top-level of port directory
+
+CWD=`{pwd}
+
+fn wayup {
+    awk '
+BEGIN{FS="|"}
+NF==5 {
+  printf("%s|%04d|%s|%s|\n", $1, $2, $3, $4)
+}
+NF==7 {
+  printf("%s|%04d|%s|%s|%s|%s|\n", $1, $2, $3, $4, $5, $6)
+}' $1 > $1.tmp
+    if(~ $status 0){
+        mv $1.tmp $1
+    }
+}
+
+
+echo 'slackmat-wayup: starting from directory '$CWD
+
+for(d in *){
+    if(test -d $d){
+        cd $d || {
+            echo 'slackmat-wayup: fatal: could not cd to '$d
+            exit 1
+        }
+        echo 'slackmat-wayup: processing port '$d
+        for(w in waybill.*){
+            echo 'slackmat-wayup: processing waybill '$w
+            wayup $w
+        }
+        cd ../
+    }
+}
+
+echo 'slackmat-wayup: done.'
+exit 0
+
+### EOF

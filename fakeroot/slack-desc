@@ -1,0 +1,11 @@
+fakeroot: fakeroot (provides a fake root environment)
+fakeroot:
+fakeroot: fakeroot provides a fake root environment, useful for performing
+fakeroot: package builds as a non-privileged user.
+fakeroot: 
+fakeroot: http://packages.debian.org/fakeroot
+fakeroot:
+fakeroot:
+fakeroot: 
+fakeroot: 
+fakeroot: Packaged by: maintainer@slackmatic.org

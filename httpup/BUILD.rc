@@ -1,0 +1,51 @@
+# /bin/rc
+# BUILD.rc
+# slackmatic build for httpup
+# wcm, 2005.11.16 - 2007.04.13
+# ===
+
+## slackmatic package maintainer (url or mailto):
+PACKAGER=maintainer@slackmatic.org
+
+## required variable definitions:
+NAME=httpup
+RELEASE=0.4.0i
+BUILD=1sm
+
+BRIEF='one way sync over http'
+PROJECT=http://jw.tks6.net/files/crux/httpup_manual.html
+
+## list of sources:
+SOURCE=(
+    http://jw.tks6.net/files/crux/$NAME-$RELEASE.tar.gz
+)
+
+
+## required build function:
+fn build {
+    ## setup hier under $PKG/:
+    mkdir -p $PKG/usr/^(bin man/man8)
+
+    cd $SRC/$NAME-$RELEASE
+
+    ## compile:
+    make -j3 || return 1
+
+    ## install binaries and manpages:
+    for(f in (httpup)){
+        install -m 0755 $f $PKG/usr/bin
+        install -m 0644 $f.8 $PKG/usr/man/man8
+    }
+    for(f in (httpup-make)){
+        install -m 0755 $CWD/files/$f $PKG/usr/bin
+        install -m 0644 $CWD/files/$f.8 $PKG/usr/man/man8
+    }
+
+    ## install misc files and docs:
+    for(f in (AUTHORS COPYING ChangeLog README TODO httpup.conf.example)){
+        install -m 0644 $f $DOC
+    }
+
+}
+
+### EOF

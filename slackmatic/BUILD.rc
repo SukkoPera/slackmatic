@@ -1,0 +1,48 @@
+# /bin/rc
+# BUILD.rc
+# slackmatic build for slackmatic
+# wcm, 2005.11.16 - 2007.06.12
+# ===
+
+## slackmatic package maintainer (url or mailto):
+PACKAGER=maintainer@slackmatic.org
+
+## required variable definitions:
+NAME=slackmatic
+RELEASE=0.91
+ARCH=noarch
+BUILD=1sm
+
+BRIEF='a package build system for slackware'
+PROJECT=http://www.slackmatic.org/
+
+## list of sources:
+SOURCE=()
+
+
+## required build function:
+fn build {
+
+    ## setup hier under $PKG/:
+    mkdir -p $PKG/usr/bin
+    mkdir -p $PKG/usr/man/man8
+    mkdir -p $PKG/etc/slackmatic/sync
+
+    ## install executables:
+    for(f in (slackmat-build slackmat-sync slackmat-clean)){
+        install -m 0755 $CWD/files/$f $PKG/usr/bin
+        install -m 0644 $CWD/files/$f.8 $PKG/usr/man/man8
+    }
+
+    ## install configs (now protected by keep.spec):
+    for(f in (slackmat.conf slack-desc.in)){
+        install -m 0644 $CWD/files/$f $PKG/etc/slackmatic/$f
+    }
+
+    ## slackmatic sync definition:
+    install -m 0644 $CWD/files/slackmatic.httpup \
+                    $PKG/etc/slackmatic/sync/slackmatic.httpup 
+
+}
+
+### EOF

@@ -1,0 +1,38 @@
+.TH httpup-make 8
+.\" httpup-make.8
+.\" manual page for httpup-make
+.\" wcm, 2005.12.19 - 2005.12.19
+.\" ===
+.SH NAME
+httpup-make \- generate HTTPUP repository description file
+.SH SYNOPSIS
+.B httpup-make
+[
+.I dir
+]
+.SH DESCRIPTION
+.B httpup-make
+is used to generate the HTTPUP repository description file
+for a slackmatic repository.
+
+The optional
+.I dir
+argument may be used to specify the path to the base directory of the repository.
+Otherwise
+.B httpup-make
+uses the current directory.
+
+The files
+.B $HOME/.httpup-ignore
+and
+.B ./httpup-ignore
+may be used to specify grep(1) patterns for files that
+.B httpup-make
+should ignore.
+
+.SH SEE ALSO
+httpup(8)
+
+.SH AUTHOR
+Wayne Marshall <wcm@guinix.com>
+.\" ### EOF

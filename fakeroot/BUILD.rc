@@ -1,0 +1,52 @@
+# /bin/rc
+# BUILD.rc
+# slackmatic build for fakeroot
+# wcm, 2006.11.30 - 2007.05.22
+# ===
+
+PACKAGER=maintainer@slackmatic.org
+
+## required variable definitions:
+NAME=fakeroot
+RELEASE=1.7.1
+BUILD=1sm
+
+BRIEF='provides a fake root environment'
+PROJECT=http://packages.debian.org/fakeroot
+
+## list of sources:
+SOURCE=(
+    http://ftp.debian.org/debian/pool/main/f/$NAME/$NAME^_$RELEASE.tar.gz
+)
+
+
+## required build function:
+fn build {
+    ## setup hier under $PKG/:
+    mkdir -p $PKG/usr/^(bin man/man1)
+
+    cd $SRC/$NAME-$RELEASE
+
+    ## configure:
+    ./configure \
+        --prefix'='/usr \
+        --libdir'='/usr/lib/libfakeroot \
+        --mandir'='/usr/man
+
+    ## compile:
+    make || return 1
+
+    ## install binaries into $PKG:
+    make install DESTDIR'='$PKG || return 1
+
+    ##
+    for(f in AUTHORS BUGS COPYING DEBUG INSTALL README.fake){
+        install -m 0644 $f $DOC
+    }
+
+    ##
+    rm -R $PKG/usr/man/??
+
+}
+
+### EOF

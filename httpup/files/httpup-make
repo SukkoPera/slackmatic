@@ -1,0 +1,105 @@
+#!/bin/rc
+# httpup-make
+# make HTTPUP repository description file
+# wcm, 2005.12.19 - 2006.01.17
+# ===
+
+nl='
+'
+
+_HTTPUP='HTTPUP'
+_HTTPUP_TMP=$_HTTPUP'.#new#'
+_HTTPUP_IGNORE='.httpup-ignore'
+
+_DEBUG='0'
+
+fn debug_msg {
+  if(~ $_DEBUG '1'){
+      echo '[httpup-make DEBUG]: '$*
+  }
+}
+
+fn error_msg {
+  echo '[http-make ERROR]: '$* >[2=1]
+}
+
+
+fn do_usage {
+  cat - << %%
+usage: httpup-make [dir]
+%%
+}
+
+fn do_make {
+  ## $1: directory
+  DIR=$1;
+  if(~ $DIR'X' 'X'){
+      error_msg 'directory not defined'
+      exit 1
+  }
+
+  if(! test -d $DIR){
+      error_msg 'directory '$DIR': not found'
+      exit 1
+  }
+      
+  PREV_CWD=`{pwd}
+  cd $DIR || {
+      error_msg 'failed to change directory to '$DIR
+      exit 1
+  }
+  CWD=`{pwd}
+
+  ## ignore file patterns:
+  MY_IGNORE=()
+
+  if(test -r $HOME/$_HTTPUP_IGNORE){
+      MY_IGNORE=($MY_IGNORE `` ($nl) {cat $HOME/$_HTTPUP_IGNORE} )
+  }
+  if(test -r $CWD/$_HTTPUP_IGNORE){
+      MY_IGNORE=($MY_IGNORE `` ($nl) {cat $CWD/$_HTTPUP_IGNORE} )
+  }
+  MY_IGNORE=(
+      $MY_IGNORE $_HTTPUP $_HTTPUP_TMP $_HTTPUP_IGNORE
+      '.httpup-current' '.httpup-urlinfo' '.httpup-repo.current'
+  )
+
+  debug_msg 'ignoring file patterns: '$^MY_IGNORE
+
+  debug_msg 'making HTTPUP repository description file for '$CWD' ...'
+  rm -Rf $_HTTPUP_TMP
+
+  ## find subdirectories:
+  find . -type d ! -name . -printf '%P\n' |\
+      egrep -v -f <{for(pattern in $MY_IGNORE){echo $pattern}} |\
+      sed -e 's/^/d:/' \
+          > $_HTTPUP_TMP
+
+  ## find files:
+  find . -type f -printf '%P\n' |\
+      egrep -v -f <{for(pattern in $MY_IGNORE){echo $pattern}} |\
+      xargs -r md5sum |\
+      sed -e 's/^/f:/' -e 's/  /:/'\
+          >> $_HTTPUP_TMP
+
+  ## done:
+  mv $_HTTPUP_TMP $_HTTPUP
+  cd $PREV_CWD
+  debug_msg 'HTTPUP for '$CWD' done.'
+
+}
+
+
+
+switch ($1) {
+  case -*
+      do_usage
+  case ()
+      do_make '.'
+  case *
+      do_make $1
+}
+
+exit 0
+
+### EOF

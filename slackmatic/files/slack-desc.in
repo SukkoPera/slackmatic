@@ -1,0 +1,30 @@
+# slack-desc.in
+# slackmatic template file for creating slack-desc
+# wcm, 2007.04.12 - 2007.04.23
+# ===
+#
+# The block of text below will be used by slackmat-build as a
+# template to generate a slack-desc file.
+#
+# Specification:
+#
+# * there should be exactly 11 lines of description
+# * description lines begin with ':'
+# * description lines should fit within the ruler
+# * the ruler is 70 characters wide (within bars)
+# * variables may be defined in BUILD.rc or the environment
+#
+#         *         *         *         *         *         *         *
+|-----handy-ruler------------------------------------------------------|
+: $NAME ($BRIEF)
+:
+: This is a slackmatic port build of $NAME:
+: $BRIEF 
+:
+: For more information about the package, see the project website at:
+: $PROJECT
+:
+:
+: This slackmatic port was developed by:
+: $PACKAGER
+### EOF

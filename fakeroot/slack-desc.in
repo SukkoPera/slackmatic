@@ -1,0 +1,20 @@
+# This block of text will be used to generate the slack-desc file.
+# There should be exactly 11 lines of description.
+# Description lines begin with ':'.
+# Description lines should fit within the ruler.
+# The ruler is 70 characters wide (within bars).
+#
+#         *         *         *         *         *         *         *
+|-----handy-ruler------------------------------------------------------|
+: $NAME (provides a fake root environment)
+:
+: fakeroot provides a fake root environment, useful for performing
+: package builds as a non-privileged user.
+: 
+: $PROJECT
+:
+:
+: 
+: 
+: Packaged by: $PACKAGER
+### EOF
