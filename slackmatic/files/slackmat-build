@@ -226,6 +226,10 @@ fn do_config {
         BUILD=$DEFAULT_BUILD
     }
 
+    if(~ $PKGEXT'X' 'X'){
+        PKGEXT=$DEFAULT_PKGEXT
+    }
+
     ## do we have BRIEF description?
     if(~ $BRIEF'X' 'X'){
         trace 'BRIEF variable not set'
@@ -853,11 +857,12 @@ do_keep() {
 
 fn do_makepkg {
     trace 'running makepkg ...'
+    _PKGFILENAME=$NAME-$RELEASE-$ARCH-$BUILD.$PKGEXT
     @{
         cd $PKG
-        $_MAKEPKG -l y -c n $CWD/$NAME-$RELEASE-$ARCH-$BUILD.tgz
+        $_MAKEPKG -l y -c n $CWD/$_PKGFILENAME
     }
-    echo $NAME-$RELEASE-$ARCH-$BUILD.tgz > $CWD/package
+    echo $_PKGFILENAME > $CWD/package
     trace 'running makepkg done.'
 }
 
