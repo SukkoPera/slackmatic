@@ -461,11 +461,13 @@ fn do_unpack {
         #_TARV='-v'
         #_TARV=''
         switch($f){
-            ## XXX TODO: add cases for zip, cab
+            ## XXX TODO: add cases for cab
             case *.tar.gz *.tar.Z *.tgz
                 tar $_TARV -C $SRC -xzf $f
             case *.tar.bz2
                 tar $_TARV -C $SRC -xjf $f
+            case *.zip
+                unzip $_TARV -d $SRC $f
             case *
                 cp $f $SRC
         }
