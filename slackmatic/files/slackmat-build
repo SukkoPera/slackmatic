@@ -466,6 +466,8 @@ fn do_unpack {
                 tar $_TARV -C $SRC -xzf $f
             case *.tar.bz2
                 tar $_TARV -C $SRC -xjf $f
+            case *.tar.xz
+                xz -dc $f | tar $_TARV -C $SRC -x
             case *.zip
                 unzip $_TARV -d $SRC $f
             case *
