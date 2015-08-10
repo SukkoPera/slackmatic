@@ -9,7 +9,7 @@ PACKAGER=maintainer@slackmatic.org
 
 ## required variable definitions:
 NAME=httpup
-RELEASE=0.4.0i
+RELEASE=0.4.0l
 BUILD=1sm
 
 BRIEF='one way sync over http'
@@ -17,7 +17,8 @@ PROJECT=http://jw.tks6.net/files/crux/httpup_manual.html
 
 ## list of sources:
 SOURCE=(
-    http://jw.tks6.net/files/crux/$NAME-$RELEASE.tar.gz
+#    http://jw.tks6.net/files/crux/$NAME-$RELEASE.tar.gz
+    http://crux.nu/files/$NAME-$RELEASE.tar.gz
 )
 
 

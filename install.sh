@@ -25,6 +25,14 @@ pkg=`ls rc_static-*`
 echo 'building slackmatic package ...'
 ## build slackmatic with itself:
 cd slackmatic
+arch=`arch`
+conffile=`ls files/slackmat-$arch.conf`
+if test -z "$conffile"; then
+    echo 'error: unsupported architecture: ' $arch
+    cd ..
+    exit 1
+fi	
+cp $conffile files/slackmat.conf
 /bin/rc ./files/slackmat-build \
     --root-build \
     --source-archive ../distfiles \
