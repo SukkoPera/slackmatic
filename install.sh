@@ -6,6 +6,7 @@
 # note: distfiles included with startkit distribution
 #
 # wcm, 2007.04.17 - 2007.04.18
+# sukkopera, 2014-2016
 # ===
 umask 022
 
@@ -15,23 +16,31 @@ if test ! $uid = 0 ; then
     exit 1
 fi
 
+# Detect arch
+arch=`arch`
+case "$arch" in
+	arm*)
+		arch=arm
+		;;
+esac
+
 echo 'begin installation of slackmatic ...'
+
+pkg=`ls rc_static-*$arch* 2> /dev/null`
+conffile=`(cd slackmatic && ls files/slackmat-$arch.conf 2> /dev/null)`
+if test -z "$pkg" -o -z "$conffile"; then
+    echo 'error: unsupported architecture:' $arch
+    cd ..
+    exit 1
+fi
 
 echo 'installing rc_static (for /bin/rc, required by slackmatic) ...'
 ## this package is included in start kit:
-pkg=`ls rc_static-*`
 /sbin/upgradepkg --install-new --reinstall $pkg
 
 echo 'building slackmatic package ...'
 ## build slackmatic with itself:
 cd slackmatic
-arch=`arch`
-conffile=`ls files/slackmat-$arch.conf`
-if test -z "$conffile"; then
-    echo 'error: unsupported architecture: ' $arch
-    cd ..
-    exit 1
-fi	
 cp $conffile files/slackmat.conf
 /bin/rc ./files/slackmat-build \
     --root-build \
