@@ -17,7 +17,8 @@ PROJECT=http://jw.tks6.net/files/crux/httpup_manual.html
 
 ## list of sources:
 SOURCE=(
-    http://jw.tks6.net/files/crux/$NAME-$RELEASE.tar.gz
+#    http://jw.tks6.net/files/crux/$NAME-$RELEASE.tar.gz
+    http://crux.nu/files/$NAME-$RELEASE.tar.gz
 )
 
 

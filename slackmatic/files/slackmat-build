@@ -62,7 +62,7 @@ _PROGPATH = $0
 _PROG = `{basename $0}
 _VERSION = 0.91
 _ARGS = $*
-_ARCHLIST=(noarch i386 i486 i586 i686 s390 x86_64)
+_ARCHLIST=(noarch i386 i486 i586 i686 s390 x86_64 arm)
 _BUILD_FILE='BUILD.rc'
 _MD5_FILE='checksum.md5'
 _KEEP_SPEC='keep.spec'
@@ -591,6 +591,8 @@ fn do_arch {
             case 's390'
                 CFLAGS=$DEFAULT_CFLAGS
             case 'x86_64'
+                CFLAGS=$DEFAULT_CFLAGS
+            case 'arm'
                 CFLAGS=$DEFAULT_CFLAGS
             case *diet
                 CFLAGS=$DEFAULT_CFLAGS
