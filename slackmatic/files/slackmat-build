@@ -44,8 +44,12 @@
 #     absolute path to makepkg
 #     added MYFETCH custom fetch support
 #     waybill format: octal mode field 4 chars wide, zero padded
+#
+#   2014.09.04
+#     use doinst.sh from $SRC if available
 # 
 # wcm, 2005.10.07 - 2007.06.12
+# sukkopera, 2014.09.04 - 
 # ===
 umask 022
 
@@ -66,6 +70,7 @@ _ARCHLIST=(noarch i386 i486 i586 i686 s390 x86_64 arm)
 _BUILD_FILE='BUILD.rc'
 _MD5_FILE='checksum.md5'
 _KEEP_SPEC='keep.spec'
+_DOINST_SH='doinst.sh'
 _ALT_BUILD = ()
 _ALT_CONF = ()
 _ALT_DISTFILES = ()
@@ -792,6 +797,13 @@ fn do_waybill {
 }
 
 
+fn do_doinst {
+    if(test -e $CWD/$_DOINST_SH){
+      trace 'installing doinst.sh'
+      cat $CWD/$_DOINST_SH > $PKG/install/doinst.sh
+    }
+}
+
 fn do_keep {
 
     if(! test -e $CWD/$_KEEP_SPEC ){
@@ -975,6 +987,7 @@ fn do_main {
     do_build
     do_fixup
     do_waybill
+    do_doinst
     do_keep
     do_makepkg
     do_nag
